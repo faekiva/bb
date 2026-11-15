@@ -59,3 +59,17 @@
 - End every agent-created issue and PR body with `> AGENT GENERATED`.
 - Ground debugging in observed state: logs, database queries, server APIs, or CLI output. For dev ports, data directories, entity IDs, and the local QA launcher, see [docs/debugging-and-qa.md](docs/debugging-and-qa.md).
 - Never tail the production bb connect gate (`bb-connect`) with `wrangler tail` or the dashboard's live logs. Attaching or detaching a tail resets its Durable Objects and drops every connected tunnel. Instead, query stored Workers Logs or the Cloudflare GraphQL Analytics API (`httpRequestsAdaptiveGroups`, `durableObjectsInvocationsAdaptiveGroups`), and reproduce with `wrangler tail --env staging` against `bb-connect-staging`.
+
+## Fork Policy
+
+This checkout is a personal fork of `get-bb/bb` that keeps pulling upstream: `origin` is the fork, `upstream` is `get-bb/bb`, and `main` tracks `origin/main`. Every change routes through this test, in order.
+
+1. **Prefer a plugin.** If the change can live in a plugin — a built-in under `plugins/` or a local plugin directory, built against `@get-bb/plugin-sdk` and the component registry — build it there. New files are ours and never conflict on merge; see [docs/forkable-plugins.md](docs/forkable-plugins.md) for what a copyable plugin looks like.
+2. **Cost the compatibility tax.** Estimate what keeping the change out of upstream files costs in bb core: new extension points, plugin SDK surface, refactors, plumbing to route core's own path through them.
+3. **Edit the upstream file ourselves when that tax is about 300 lines or more.** If the compatibility-preserving route adds roughly 300 lines over editing the upstream file directly, edit the upstream file. Count only what it adds to files that already exist upstream, not the plugin's own new files. State the estimate and why the plugin route needed it in the commit message.
+
+Edit an upstream file directly, at any size, when the plugin route cannot reach the surface at all; say which surface in the commit message.
+
+Keep direct edits to upstream files surgical: change as few of them as the job allows, and leave existing structure, naming, and formatting alone so upstream diffs apply cleanly.
+
+`AGENTS.md` is exempt from all of the above. This fork owns it: rewrite, cut, or contradict upstream guidance in it freely, and resolve a merge conflict in it by taking our version. Only code compatibility is a goal, never this file's.
