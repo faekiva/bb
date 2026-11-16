@@ -19,7 +19,9 @@
 
 - The server owns product policy: defaults, instructions, manager behavior, tool lists, and thread behavior. The host daemon owns host-local primitives, provider translation, runtime/session management, and workspace execution.
 - Return raw host-local data from the daemon; assemble product behavior on the server. Move responsibility across this boundary only when the change requires it.
-- Increment `HOST_DAEMON_PROTOCOL_VERSION` for changes to server/daemon wire fields, including their types, requiredness, defaults, or meaning, unless compatibility with the previously shipped daemon is deliberately preserved and tested. This covers session payloads, WebSocket messages, and host RPC commands/results. Shared TypeScript builds do not verify compatibility with enrolled machines; the version bump triggers their update.
+- `HOST_DAEMON_PROTOCOL_VERSION` is `10_000 + upstream's value`, so our bumps never collide with theirs. Increment it for every server/daemon wire change — types, requiredness, defaults, or meaning — across session payloads, WebSocket messages, and host RPC commands/results. `HOST_DAEMON_COMPATIBLE_PROTOCOL_VERSIONS` accepts only the current value, so an unbumped change is silently misparsed.
+- Never lower the number, and never carry a second one to keep an enrolled machine alive: a daemon installs only a strictly higher server version, from this server's `/install/bb-app.tgz`, and cannot downgrade itself. So deploy the server first, and resolve an upstream bump conflict to `10_000 + theirs` (or current + 1 when that is at or below current). Recover a machine that missed the update with `bb machine retry-update <id>`.
+- A plugin dodges the bump only by using host RPCs that already exist; a new host RPC is a wire change, `experimental_callHostRpc` included.
 
 ## CLI And Plugin API
 
