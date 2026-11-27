@@ -14,8 +14,22 @@ const ALLOWED_FILES = new Set([...KNOWN_CONFLICTS, SELF_PATH]);
 const PROTOCOL_OFFSET = 10_000;
 const CONFLICT_ROUND_LIMIT = 20;
 
-const repo =
-  process.env.FORK_SYNC_REPO ?? dirname(dirname(fileURLToPath(import.meta.url)));
+const scriptDir = dirname(fileURLToPath(import.meta.url));
+
+function resolveRepo() {
+  const explicit = process.env.FORK_SYNC_REPO;
+  if (explicit) return explicit;
+  const candidates = [process.cwd(), dirname(scriptDir)];
+  const found = candidates.find((candidate) => existsSync(join(candidate, ".git")));
+  if (found === undefined) {
+    throw new Error(
+      `no git checkout found among ${candidates.join(", ")}; set FORK_SYNC_REPO`,
+    );
+  }
+  return found;
+}
+
+const repo = resolveRepo();
 const baseDir = join(tmpdir(), "bb-fork-sync");
 const scratch = process.env.FORK_SYNC_WORKTREE ?? join(baseDir, "worktree");
 const reportPath = process.env.FORK_SYNC_REPORT ?? join(baseDir, "last-failure.txt");
@@ -297,7 +311,7 @@ function triggerEscalation() {
   return `escalation trigger failed: ${(result.stderr ?? "").trim()}`;
 }
 
-function reportEscalation(reason, context) {
+function buildReport(reason, context) {
   const details = [
     `reason: ${reason}`,
     `origin/main: ${context.oldMain}`,
@@ -325,6 +339,11 @@ function reportEscalation(reason, context) {
   }
   mkdirSync(dirname(reportPath), { recursive: true });
   writeFileSync(reportPath, `${details.join("\n")}\n`, "utf8");
+  return details;
+}
+
+function reportEscalation(reason, context) {
+  const details = buildReport(reason, context);
   const triggered = triggerEscalation();
   return [
     `FORK SYNC ESCALATED: ${reason}`,
@@ -334,6 +353,15 @@ function reportEscalation(reason, context) {
   ]
     .filter((line) => line.length > 0)
     .join("\n");
+}
+
+function reportFailure(reason, context) {
+  const details = buildReport(reason, context);
+  return [
+    `FORK SYNC FAILED: ${reason}`,
+    ...details,
+    `report: ${reportPath}`,
+  ].join("\n");
 }
 
 function main(context) {
@@ -387,9 +415,11 @@ try {
   const summary = main(context);
   if (summary.length > 0) process.stdout.write(`${summary}\n`);
 } catch (error) {
-  const isEscalation = error instanceof Escalate;
-  const reason = isEscalation
-    ? error.message
-    : `mechanical sync failed: ${error instanceof Error ? error.message : String(error)}`;
-  process.stdout.write(`${reportEscalation(reason, context)}\n`);
+  if (error instanceof Escalate) {
+    process.stdout.write(`${reportEscalation(error.message, context)}\n`);
+  } else {
+    const detail = error instanceof Error ? error.message : String(error);
+    process.stdout.write(`${reportFailure(`mechanical sync failed: ${detail}`, context)}\n`);
+    process.exitCode = 1;
+  }
 }
