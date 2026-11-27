@@ -9,8 +9,13 @@ const PROTOCOL_PATH = "packages/host-daemon-contract/src/protocol.ts";
 const CONTRACT_TEST_PATH = "packages/host-daemon-contract/test/contract.test.ts";
 const AGENTS_PATH = "AGENTS.md";
 const SELF_PATH = "scripts/sync-fork-upstream.mjs";
+const RELEASE_WORKFLOW_PATH = ".github/workflows/fork-bb-app-release.yml";
 const KNOWN_CONFLICTS = [AGENTS_PATH, PROTOCOL_PATH, CONTRACT_TEST_PATH];
-const ALLOWED_FILES = new Set([...KNOWN_CONFLICTS, SELF_PATH]);
+const ALLOWED_FILES = new Set([
+  ...KNOWN_CONFLICTS,
+  SELF_PATH,
+  RELEASE_WORKFLOW_PATH,
+]);
 const PROTOCOL_OFFSET = 10_000;
 const CONFLICT_ROUND_LIMIT = 20;
 

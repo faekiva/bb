@@ -1,0 +1,141 @@
+# Fork-only: build the `bb-app` tarball the homelab's nix pin installs and
+# attach it to a release, so a derivation can `fetchurl` it by an immutable
+# URL. Upstream publishes the same tarball to npm
+# (`.github/workflows/publish-bb-app.yml`); a fork cannot own the `bb-app`
+# package name there, so a release asset takes npm's place.
+#
+# Tag format is `v<bb-app version>-fork.<short sha>` — upstream's desktop
+# releases own `desktop-v<version>` tags and reach this fork through the
+# upstream sync, so the tag must not collide with theirs. The asset name is
+# plain `bb-app-<version>.tgz`, which is what the nix derivation expects.
+name: Fork bb-app release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Rebuild and overwrite the release for this commit.
+        type: boolean
+        default: false
+
+# Publishing a release needs write; nothing else here inherits a token.
+permissions:
+  contents: write
+
+concurrency:
+  group: fork-bb-app-release-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Older fork releases are pruned after a successful publish; the nix pin
+  # only ever references the newest, and unbounded releases make the tag
+  # list useless.
+  KEEP_RELEASES: "5"
+
+jobs:
+  release:
+    name: Build and publish bb-app tarball
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          version: 9.15.0
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The same entry point a developer runs; bb-app's build reads the
+      # @bb/app, @bb/server and @bb/cli dist trees.
+      - name: Build
+        run: pnpm run build
+
+      - name: Pack tarball
+        id: pack
+        working-directory: packages/bb-app
+        run: |
+          set -euo pipefail
+          npm pack
+          version="$(node -p 'require("./package.json").version')"
+          asset="bb-app-${version}.tgz"
+          short="${GITHUB_SHA::7}"
+          tag="v${version}-fork.${short}"
+          # SRI form, which is what a nix `hash` field wants.
+          hash="sha256-$(openssl dgst -sha256 -binary "$asset" | openssl base64 -A)"
+          {
+            echo "version=${version}"
+            echo "asset=${asset}"
+            echo "tag=${tag}"
+            echo "hash=${hash}"
+          } >>"$GITHUB_OUTPUT"
+          {
+            echo "## bb-app fork tarball"
+            echo
+            echo "| field | value |"
+            echo "|---|---|"
+            echo "| version | \`${version}\` |"
+            echo "| tag | \`${tag}\` |"
+            echo "| asset | \`${asset}\` |"
+            echo "| nix hash | \`${hash}\` |"
+            echo "| commit | \`${GITHUB_SHA}\` |"
+          } >>"$GITHUB_STEP_SUMMARY"
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.pack.outputs.tag }}
+          ASSET: packages/bb-app/${{ steps.pack.outputs.asset }}
+          HASH: ${{ steps.pack.outputs.hash }}
+          VERSION: ${{ steps.pack.outputs.version }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          set -euo pipefail
+          short="${GITHUB_SHA::7}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            if [[ "$FORCE" != "true" ]]; then
+              # A published asset is what a nix hash points at; rebuilding it
+              # under the same tag would silently invalidate that pin.
+              echo "release $TAG already exists — leaving it alone (dispatch with force to overwrite)."
+              exit 0
+            fi
+            gh release upload "$TAG" "$ASSET" --clobber
+          else
+            gh release create "$TAG" "$ASSET" \
+              --target "$GITHUB_SHA" \
+              --title "bb-app ${VERSION} (fork ${short})" \
+              --notes "bb-app ${VERSION} built from faekiva/bb @ ${GITHUB_SHA}.
+
+          nix pin:
+
+          \`\`\`nix
+          url = \"https://github.com/faekiva/bb/releases/download/${TAG}/bb-app-${VERSION}.tgz\";
+          hash = \"${HASH}\";
+          \`\`\`"
+          fi
+          gh release view "$TAG" --json url --jq '"published " + .url'
+
+      - name: Prune old fork releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release list --limit 100 --json tagName \
+            --jq '.[].tagName | select(test("-fork\\.[0-9a-f]+$"))' \
+            | tail -n "+$((KEEP_RELEASES + 1))" \
+            | while read -r old; do
+                echo "pruning $old"
+                gh release delete "$old" --yes --cleanup-tag
+              done

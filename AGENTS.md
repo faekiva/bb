@@ -74,4 +74,6 @@ Edit an upstream file directly, at any size, when the plugin route cannot reach 
 
 Keep direct edits to upstream files surgical: change as few of them as the job allows, and leave existing structure, naming, and formatting alone so upstream diffs apply cleanly.
 
+Files that are fork infrastructure rather than product — this file, [scripts/sync-fork-upstream.mjs](scripts/sync-fork-upstream.mjs), and [.github/workflows/fork-bb-app-release.yml](.github/workflows/fork-bb-app-release.yml) — are ours outright. The release workflow builds the `bb-app` tarball each push to `main` and attaches it to a `v<version>-fork.<short sha>` release, because a fork cannot publish to npm's `bb-app` and that tarball is what the homelab's nix pin installs. `scripts/sync-fork-upstream.mjs` enforces the boundary: a fork-only file missing from its `ALLOWED_FILES` makes the sync refuse the rebased tip.
+
 `AGENTS.md` is exempt from all of the above. This fork owns it: rewrite, cut, or contradict upstream guidance in it freely, and resolve a merge conflict in it by taking our version. Only code compatibility is a goal, never this file's.
