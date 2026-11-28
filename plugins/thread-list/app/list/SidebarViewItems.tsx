@@ -22,6 +22,7 @@ import {
   sidebarGroupThreadsByEnvironmentAtom,
   sidebarEnvironmentGroupingAtom,
   sidebarGroupByReadStatusAtom,
+  sidebarGroupByDayAtom,
   sidebarShowProviderIconsAtom,
   sidebarShowRowMetadataAtom,
   sidebarShowEmptyProjectsAtom,
@@ -145,6 +146,7 @@ function SidebarViewItems({ page }: { page: SidebarViewPage }) {
   const [groupByReadStatus, setGroupByReadStatus] = useAtom(
     sidebarGroupByReadStatusAtom,
   );
+  const [groupByDay, setGroupByDay] = useAtom(sidebarGroupByDayAtom);
   const [showProviderIcons, setShowProviderIcons] = useAtom(
     sidebarShowProviderIconsAtom,
   );
@@ -254,6 +256,19 @@ function SidebarViewItems({ page }: { page: SidebarViewPage }) {
             By read status
             <span className="ml-auto inline-flex size-4 shrink-0 items-center justify-center">
               {groupByReadStatus && <Icon name="Check" className="size-4" />}
+            </span>
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            role="menuitemcheckbox"
+            aria-checked={groupByDay}
+            onSelect={(event) => {
+              event.preventDefault();
+              setGroupByDay(!groupByDay);
+            }}
+          >
+            By day
+            <span className="ml-auto inline-flex size-4 shrink-0 items-center justify-center">
+              {groupByDay && <Icon name="Check" className="size-4" />}
             </span>
           </DropdownMenuItem>
         </DropdownMenuGroup>

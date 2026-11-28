@@ -7,7 +7,7 @@ description: "Inspect or change the sidebar thread list's layout preferences: or
 
 The Thread list plugin owns the sidebar's layout state. Read it with
 `bb thread-list prefs list --json`; keys are `showProviderIcons`, `showRowMetadata`, `showEmptyProjects`, `threadLifecycles`, `organizationMode`,
-`environmentGrouping`, `groupByReadStatus`, `chronologicalSort`, `sortDirection`, `sectionOrder`,
+`environmentGrouping`, `groupByReadStatus`, `groupByDay`, `dayGroupEdgeHour`, `chronologicalSort`, `sortDirection`, `sectionOrder`,
 `manualSectionOrder`, `machineSectionOrder`, `hiddenGroups` (including the
 built-in `threads` group), `rowActions`,
 `collapsedSections`, `collapsedProjects`, `collapsedThreads`,
@@ -111,6 +111,20 @@ defaults to `false`; use `bb thread-list prefs set groupByReadStatus true` to
 turn it on. Parents start collapsed while it is on, without changing
 `collapsedThreads`, and `environmentGrouping` is ignored. The open thread keeps
 its place until another thread is opened.
+
+Organize → Groups → By day (organize by Custom) files the threads that are
+neither pinned nor in a custom section into day sections — `Today`,
+`Yesterday`, `Previous 7 days`, `Previous 30 days`, then `Older` — bucketed on
+their last attention time. `groupByDay` defaults to `true` for the
+`chronological` organization and does nothing in the other two modes. The day
+sections are drawn at the top level beside custom sections and the loose
+`threads` group is hidden while they are on; `bb thread-list prefs set
+groupByDay false` restores it. A bucket with no threads is not drawn. Move a
+bucket with drag, and hide one by section id (`section:day:week` moves into
+More). `dayGroupEdgeHour` (default `3`) is the local hour a new day starts, so
+a thread touched at 1am still counts as `Today`. Dropping a thread on a day
+section unsections it, and `bb thread-list prefs set dayGroupEdgeHour 0` makes
+the buckets follow midnight instead.
 
 New threads inherit the sidebar group where creation was invoked. Pinned
 creates pinned threads; custom sections supply their section; project, machine,

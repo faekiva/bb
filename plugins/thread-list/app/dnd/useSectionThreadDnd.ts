@@ -21,6 +21,7 @@ import {
   type UniqueIdentifier,
 } from "@dnd-kit/core";
 import type { SidebarThread } from "../model/sidebar-thread.js";
+import { normalizeDaySectionId } from "../model/day-grouping.js";
 import { useSdk } from "@get-bb/plugin-sdk/app";
 import type { NeighborReorderRequest } from "../model/neighbor-reorder.js";
 import {
@@ -183,6 +184,11 @@ interface SectionThreadUpdate {
   threadId: string;
   parentThreadId?: string | null;
   sectionId?: string | null;
+}
+
+function toThreadUpdate(update: SectionThreadUpdate): SectionThreadUpdate {
+  const sectionId = normalizeDaySectionId(update.sectionId);
+  return sectionId === update.sectionId ? update : { ...update, sectionId };
 }
 
 interface SectionThreadDropChanges {
@@ -1442,7 +1448,9 @@ export function useSectionThreadDnd({
       return setPinned(decision.unpinThreadIds, false)
         .then(() =>
           Promise.allSettled(
-            decision.updates.map((update) => sdk.threads.update(update)),
+            decision.updates.map((update) =>
+              sdk.threads.update(toThreadUpdate(update)),
+            ),
           ),
         )
         .then((results) => {

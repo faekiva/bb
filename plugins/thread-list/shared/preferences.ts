@@ -28,6 +28,8 @@ export const sortDirectionSchema = z.enum([
 ]);
 export type SortDirection = z.infer<typeof sortDirectionSchema>;
 
+const DAY_GROUP_DEFAULT_EDGE_HOUR = 3;
+
 export const environmentGroupingSchema = z.union([
   z.literal("auto"),
   z.boolean(),
@@ -134,6 +136,18 @@ export const preferenceDefinitions = {
     z.boolean(),
     false,
     "List threads that show an unread dot above the rest, keeping the selected sort within each group. The open thread keeps its place until another thread is opened.",
+    null,
+  ),
+  groupByDay: definePreference(
+    z.boolean(),
+    true,
+    "Group threads that are neither pinned nor in a custom section into day buckets (Today, Yesterday, Previous 7 days, Previous 30 days, Older) in the chronological organization.",
+    null,
+  ),
+  dayGroupEdgeHour: definePreference(
+    z.number().int().min(0).max(23),
+    DAY_GROUP_DEFAULT_EDGE_HOUR,
+    `Local hour (0-23) when a new day bucket starts, so a thread active at 1am still counts as Today. Defaults to ${DAY_GROUP_DEFAULT_EDGE_HOUR}.`,
     null,
   ),
   chronologicalSort: definePreference(

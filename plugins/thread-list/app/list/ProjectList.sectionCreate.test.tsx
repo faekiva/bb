@@ -16,6 +16,7 @@ import {
 } from "../model/fixtures.js";
 import { preferencesReadyAtom } from "../preferences/preferences-sync.js";
 import {
+  sidebarGroupByDayAtom,
   sidebarManualSectionOrderAtom,
   sidebarOrganizationModeAtom,
 } from "../preferences/atoms.js";
@@ -52,6 +53,7 @@ function renderCustomSections(pinned = false) {
   const store = createStore();
   store.set(preferencesReadyAtom(), true);
   store.set(sidebarOrganizationModeAtom, "chronological");
+  store.set(sidebarGroupByDayAtom, false);
   const rendered = renderSlot(
     { component: Harness },
     { children: <ProjectList activeThreadId={null} />, store },

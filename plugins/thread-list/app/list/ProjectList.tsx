@@ -118,6 +118,8 @@ import {
 } from "./BuiltInSidebarSection.js";
 import { ReorderableSidebarSectionOrderList } from "./ReorderableSidebarSectionOrderList.js";
 import { useSidebarModeSectionOrder } from "./useSidebarModeSectionOrder.js";
+import { useDayGrouping } from "./useDayGrouping.js";
+import { normalizeDaySectionId } from "../model/day-grouping.js";
 import { useReadStatusGrouping } from "./useReadStatusGrouping.js";
 import { haveSameOrder } from "../model/stored-order.js";
 import {
@@ -873,9 +875,13 @@ function SectionModeSections({
   threads,
   threadsSection,
 }: SectionModeSectionsProps) {
+  const dayGrouping = useDayGrouping(threads);
   const nonPinnedThreads = useMemo(
-    () => threads.filter((thread) => !effectivePinnedThreadIds.has(thread.id)),
-    [effectivePinnedThreadIds, threads],
+    () =>
+      dayGrouping.threads.filter(
+        (thread) => !effectivePinnedThreadIds.has(thread.id),
+      ),
+    [dayGrouping.threads, effectivePinnedThreadIds],
   );
   const threadListState = getProjectThreadListState({
     status,
@@ -883,22 +889,54 @@ function SectionModeSections({
   });
   const threadSectionIds = useMemo(
     () =>
-      sections.map((section) =>
+      [...sections, ...dayGrouping.sections].map((section) =>
         buildSidebarEntitySectionId("section", section.id),
       ),
-    [sections],
+    [dayGrouping.sections, sections],
+  );
+  const daySectionIds = useMemo(
+    () =>
+      new Set(
+        dayGrouping.allSectionIds.map((sectionId) =>
+          buildSidebarEntitySectionId("section", sectionId),
+        ),
+      ),
+    [dayGrouping.allSectionIds],
+  );
+  const presentDaySectionIds = useMemo(
+    () =>
+      new Set(
+        dayGrouping.presentSectionIds.map((sectionId) =>
+          buildSidebarEntitySectionId("section", sectionId),
+        ),
+      ),
+    [dayGrouping.presentSectionIds],
   );
   const { onOrderChange, order, persistedOrder } = useSidebarModeSectionOrder({
     mode: "chronological",
     entitySectionIds: threadSectionIds,
+    hasThreadsSection:
+      dayGrouping.allSectionIds.length === 0 ||
+      threadListState.status !== "ready",
     showPinnedSection,
   });
+  const visibleOrder = useMemo(() => {
+    if (daySectionIds.size === 0) return order;
+    return order.filter(
+      (sectionId) =>
+        !daySectionIds.has(sectionId) || presentDaySectionIds.has(sectionId),
+    );
+  }, [daySectionIds, order, presentDaySectionIds]);
+  const renderedSections = useMemo(
+    () => [...sections, ...dayGrouping.sections],
+    [dayGrouping.sections, sections],
+  );
 
   return (
     <ChronologicalSectionThreadSections
       threadListState={threadListState}
       compareThreads={compareThreads}
-      sections={sections}
+      sections={renderedSections}
       selectedThreadId={selectedThreadId}
       collapsedThreadIds={collapsedThreadIds}
       collapsedEnvironmentIds={collapsedEnvironmentIds}
@@ -909,7 +947,7 @@ function SectionModeSections({
       onToggleThreadCollapsed={onToggleThreadCollapsed}
       onToggleEnvironmentCollapsed={onToggleEnvironmentCollapsed}
       fullSectionOrder={persistedOrder}
-      topLevelSectionOrder={order}
+      topLevelSectionOrder={visibleOrder}
       onTopLevelSectionOrderChange={onOrderChange}
       pinnedReorderPending={pinnedReorderPending}
       pinnedRootItems={pinnedRootItems}
@@ -1398,7 +1436,11 @@ function ProjectListComponent({
   );
   const handleCreateThreadInSection = useCallback(
     (sectionId: string, split: boolean) => {
-      openRootComposeForProject({ projectId: null, sectionId, split });
+      openRootComposeForProject({
+        projectId: null,
+        sectionId: normalizeDaySectionId(sectionId) ?? null,
+        split,
+      });
     },
     [openRootComposeForProject],
   );

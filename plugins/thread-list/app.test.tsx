@@ -211,7 +211,10 @@ describe("thread-list plugin", () => {
 
   it("renders pinned, custom sections, and loose threads in chronological mode", async () => {
     setPreferencesMirrorStorageForTest(null);
-    const { rpcCalls } = renderList({ organizationMode: "chronological" });
+    const { rpcCalls } = renderList({
+      organizationMode: "chronological",
+      groupByDay: false,
+    });
 
     await screen.findByText("Pinned thread");
     expect(rpcCalls.map((call) => call.method)).toEqual(["listPreferences"]);
@@ -226,6 +229,21 @@ describe("thread-list plugin", () => {
     expect(
       screen.getByRole("button", { name: "Collapse Parent thread threads" }),
     ).not.toBeNull();
+  });
+
+  it("files loose threads into a day section in place of Threads", async () => {
+    setPreferencesMirrorStorageForTest(null);
+    renderList({ organizationMode: "chronological" });
+
+    await screen.findByText("Pinned thread");
+    expect(sectionHeaders()).toEqual(["Pinned", "Later", "Review", "Older"]);
+    expect(threadIds()).toEqual([
+      "thr_pinned",
+      "thr_later",
+      "thr_parent",
+      "thr_child",
+      "thr_personal",
+    ]);
   });
 
   it("groups pinned worktree roots when environment grouping is enabled", async () => {

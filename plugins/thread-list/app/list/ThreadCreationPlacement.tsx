@@ -1,4 +1,5 @@
 import { createContext, useContext, type ReactNode } from "react";
+import { normalizeDaySectionId } from "../model/day-grouping.js";
 
 const PlacementGroupContext = createContext("threads");
 
@@ -18,13 +19,14 @@ export function ThreadCreationPlacementScope({
 
 export function useThreadCreationPlacement(sectionWhenUnpinned: string | null) {
   const group = useContext(PlacementGroupContext);
+  const sectionId =
+    group === "pinned"
+      ? sectionWhenUnpinned
+      : group.startsWith("section:")
+        ? normalizeDaySectionId(group.slice("section:".length))
+        : null;
   return {
     pinned: group === "pinned",
-    sectionId:
-      group === "pinned"
-        ? sectionWhenUnpinned
-        : group.startsWith("section:")
-          ? group.slice("section:".length)
-          : null,
+    sectionId: sectionId ?? null,
   };
 }

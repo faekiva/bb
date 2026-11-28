@@ -40,6 +40,10 @@ export const sidebarEnvironmentGroupingAtom = createSyncedPreferenceAtom(
 );
 export const sidebarGroupByReadStatusAtom =
   createSyncedPreferenceAtom("groupByReadStatus");
+export const sidebarGroupByDayAtom = createSyncedPreferenceAtom("groupByDay");
+export const sidebarDayGroupEdgeHourAtom = createSyncedPreferenceAtom(
+  "dayGroupEdgeHour",
+);
 export const sidebarGroupThreadsByEnvironmentAtom = atom((get) => {
   if (get(sidebarGroupByReadStatusAtom)) return false;
   const grouping = get(sidebarEnvironmentGroupingAtom);

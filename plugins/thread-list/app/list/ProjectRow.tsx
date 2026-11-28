@@ -41,6 +41,7 @@ import {
 } from "@dnd-kit/sortable";
 import { createPortal } from "react-dom";
 import type { SidebarThread } from "../model/sidebar-thread.js";
+import { isDaySectionId } from "../model/day-grouping.js";
 import { toast } from "sonner";
 import {
   experimental_ThreadStatusGlyph as ThreadStatusGlyph,
@@ -1269,6 +1270,7 @@ const SectionTreeItemRow = memo(function SectionTreeItemRow({
 }: SectionTreeItemRowProps) {
   const sdk = useSdk();
   const sectionName = section.name;
+  const isDaySection = isDaySectionId(section.id);
   const rename = useSidebarRename({
     kind: "section",
     id: section.id,
@@ -1362,7 +1364,7 @@ const SectionTreeItemRow = memo(function SectionTreeItemRow({
         label={`${sectionName} section`}
         sectionId={buildSidebarEntitySectionId("section", section.id)}
         onNewThread={
-          onCreateThreadInSection
+          onCreateThreadInSection && !isDaySection
             ? (split: boolean) => onCreateThreadInSection(section.id, split)
             : undefined
         }
@@ -1370,9 +1372,11 @@ const SectionTreeItemRow = memo(function SectionTreeItemRow({
         onCloseAutoFocus={rename.onCloseAutoFocus}
       >
         <SidebarSectionMenuItems
-          onRename={rename.startEditingFromMenu}
+          onRename={isDaySection ? undefined : rename.startEditingFromMenu}
           onRemove={
-            onRemoveSection ? () => onRemoveSection(section) : undefined
+            onRemoveSection && !isDaySection
+              ? () => onRemoveSection(section)
+              : undefined
           }
         />
       </SidebarHeaderControls>
@@ -1380,8 +1384,10 @@ const SectionTreeItemRow = memo(function SectionTreeItemRow({
     return (
       <TopLevelSidebarSection
         label={sectionName}
-        labelEditor={rename.editor}
-        onRename={rename.startEditingFromDoubleClick}
+        labelEditor={isDaySection ? undefined : rename.editor}
+        onRename={
+          isDaySection ? undefined : rename.startEditingFromDoubleClick
+        }
         sectionId={section.id}
         actions={topLevelActions}
         actionsOpen={isTopLevelActionsOpen}
@@ -1419,9 +1425,13 @@ const SectionTreeItemRow = memo(function SectionTreeItemRow({
         name={sectionName}
         label={sectionName}
         sectionId={buildSidebarEntitySectionId("section", section.id)}
-        labelEditor={rename.editor}
-        onRename={rename.startEditingFromDoubleClick}
-        onRenameFromMenu={rename.startEditingFromMenu}
+        labelEditor={isDaySection ? undefined : rename.editor}
+        onRename={
+          isDaySection ? undefined : rename.startEditingFromDoubleClick
+        }
+        onRenameFromMenu={
+          isDaySection ? undefined : rename.startEditingFromMenu
+        }
         depth={headerDepth}
         onCloseAutoFocus={rename.onCloseAutoFocus}
         collapsedThreads={sectionThreads}
@@ -1429,11 +1439,15 @@ const SectionTreeItemRow = memo(function SectionTreeItemRow({
         dragBindings={rename.isEditing ? undefined : dragBindings}
         isCollapsed={isCollapsed}
         onCreateThread={
-          onCreateThreadInSection
+          onCreateThreadInSection && !isDaySection
             ? (split: boolean) => onCreateThreadInSection(section.id, split)
             : undefined
         }
-        onRemove={onRemoveSection ? () => onRemoveSection(section) : undefined}
+        onRemove={
+          onRemoveSection && !isDaySection
+            ? () => onRemoveSection(section)
+            : undefined
+        }
         onToggleCollapsed={handleToggleCollapsed}
         stickyLevel={stickyLevel}
       />
@@ -2058,7 +2072,10 @@ export const ChronologicalSectionThreadSections = memo(
         title: item.group.name,
         threads: getProjectThreadItemDescendants(item.group.items),
         onNewThread: onCreateThreadInSection
-          ? (split: boolean) => onCreateThreadInSection(item.group.id, split)
+          ? isDaySectionId(item.group.id)
+            ? undefined
+            : (split: boolean) =>
+                onCreateThreadInSection(item.group.id, split)
           : undefined,
         renderContent: (close: () => void) => (
           <ProjectThreadTree

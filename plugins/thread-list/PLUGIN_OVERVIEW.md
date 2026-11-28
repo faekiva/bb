@@ -9,6 +9,7 @@ The sidebar thread list, as a plugin.
 - Agent provider icons before thread titles, controlled by Organize → Rows → Provider icons.
 - A metadata line under thread titles where plugins show details such as the pull request number, controlled by Organize → Rows → Metadata.
 - Unread threads listed above read ones, controlled by Organize → Groups → By read status.
+- Threads outside Pinned and custom sections filed into Today, Yesterday, Previous 7 days, Previous 30 days, and Older day sections, controlled by Organize → Groups → By day.
 
 ## How it works
 

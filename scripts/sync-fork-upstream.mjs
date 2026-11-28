@@ -11,8 +11,26 @@ const AGENTS_PATH = "AGENTS.md";
 const SELF_PATH = "scripts/sync-fork-upstream.mjs";
 const RELEASE_WORKFLOW_PATH = ".github/workflows/fork-bb-app-release.yml";
 const KNOWN_CONFLICTS = [AGENTS_PATH, PROTOCOL_PATH, CONTRACT_TEST_PATH];
+const FORK_EDIT_PATHS = [
+  "docs/configuration.md",
+  "plugins/thread-list/PLUGIN_OVERVIEW.md",
+  "plugins/thread-list/app.test.tsx",
+  "plugins/thread-list/app/dnd/useSectionThreadDnd.ts",
+  "plugins/thread-list/app/list/ProjectList.sectionCreate.test.tsx",
+  "plugins/thread-list/app/list/ProjectList.tsx",
+  "plugins/thread-list/app/list/ProjectRow.tsx",
+  "plugins/thread-list/app/list/SidebarViewItems.tsx",
+  "plugins/thread-list/app/list/ThreadCreationPlacement.tsx",
+  "plugins/thread-list/app/list/useDayGrouping.ts",
+  "plugins/thread-list/app/model/day-grouping.test.ts",
+  "plugins/thread-list/app/model/day-grouping.ts",
+  "plugins/thread-list/app/preferences/atoms.ts",
+  "plugins/thread-list/shared/preferences.ts",
+  "plugins/thread-list/skills/thread-list/SKILL.md",
+];
 const ALLOWED_FILES = new Set([
   ...KNOWN_CONFLICTS,
+  ...FORK_EDIT_PATHS,
   SELF_PATH,
   RELEASE_WORKFLOW_PATH,
 ]);
@@ -165,6 +183,11 @@ function resolveKnownConflict(path, context) {
   if (path === AGENTS_PATH) return resolveAgents(context);
   if (path === PROTOCOL_PATH) return resolveProtocol(context);
   if (path === CONTRACT_TEST_PATH) return resolveContractTest(context);
+  if (FORK_EDIT_PATHS.includes(path)) {
+    throw new Escalate(
+      `upstream changed ${path}, which the fork edits for day grouping; merge the two by hand`,
+    );
+  }
   throw new Escalate(`no documented resolution for ${path}`);
 }
 
