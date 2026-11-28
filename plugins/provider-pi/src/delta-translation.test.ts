@@ -2284,6 +2284,58 @@ describe("pi delta translation equivalence", () => {
     },
   );
 
+  it("settles the abort a dispatched steer superseded as interrupted", () => {
+    const translator = createPiDeltaTranslator({
+      resolveModelContextWindow: builtinCatalogResolver,
+    });
+    expect(
+      translator.translate(
+        sdkMessage({
+          type: "agent_end",
+          settlementOnly: true,
+          settlementInterrupted: true,
+          providerCheckpointId: "settled-checkpoint",
+          messages: [
+            {
+              role: "assistant",
+              stopReason: "aborted",
+              content: [{ type: "text", text: "half a repl" }],
+              usage: { input: 4, output: 2 },
+            },
+          ],
+        }),
+      ),
+    ).toEqual([
+      {
+        kind: "turn.boundary",
+        status: "interrupted",
+        providerCheckpointId: "settled-checkpoint",
+        claimIfIdle: true,
+      },
+    ]);
+  });
+
+  it("keeps the abort of a run no steer superseded failed", () => {
+    const translator = createPiDeltaTranslator({
+      resolveModelContextWindow: builtinCatalogResolver,
+    });
+    const deltas = translator.translate(
+      sdkMessage({
+        type: "agent_end",
+        settlementOnly: true,
+        messages: [{ role: "assistant", stopReason: "aborted" }],
+      }),
+    );
+    expect(deltas).toContainEqual(
+      expect.objectContaining({ kind: "turn.boundary", status: "failed" }),
+    );
+    expect(deltas.filter((delta) => delta.kind === "provider.error")).toEqual([
+      expect.objectContaining({
+        detail: expect.stringContaining("no automatic resume"),
+      }),
+    ]);
+  });
+
   it("session error envelopes settle the open turn as failed", () => {
     const harness = createHarness();
     harness.translate(loadFixture("agent-start.json"));

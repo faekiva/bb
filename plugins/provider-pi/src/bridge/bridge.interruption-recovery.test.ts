@@ -21,6 +21,7 @@ async function start(
     settlement?: boolean;
     aborted?: string;
     duplicate?: boolean;
+    steerAborts?: boolean;
   } = {},
 ) {
   const harness = await startFakePiBridge({
@@ -37,6 +38,7 @@ async function start(
   if (options.aborted !== undefined)
     vi.stubEnv("FAKE_PI_SETTLED_ABORTED", options.aborted);
   if (options.duplicate) vi.stubEnv("FAKE_PI_DUPLICATE_SETTLED", "1");
+  if (options.steerAborts) vi.stubEnv("FAKE_PI_STEER_ABORTS", "1");
   const response = await harness.startThread("thread");
   const result = response.result;
   if (
@@ -269,6 +271,29 @@ it.each(["/hold", "/wait-hold"])(
     expect(t.deltas().filter((d) => d.kind === "turn.boundary")).toHaveLength(
       1,
     );
+  },
+);
+
+it.each([true, false])(
+  "settles a steer that interrupted the run as interrupted (settlement %s)",
+  async (settlement) => {
+    const t = await start({ settlement, steerAborts: true });
+    await t.turn("/hold");
+    await t.harness.waitForDelta("thread", (d) => d.kind === "turn.open");
+    await t.send("turn/steer", {
+      expectedTurnId: "turn-1",
+      clientRequestId: "creq_cd23456789",
+      input: [{ type: "text", text: "interrupt this run", mentions: [] }],
+      options: FULL_PERMISSION_OPTIONS,
+    });
+    await t.harness.waitForTurnBoundary("thread");
+    const deltas = t.deltas();
+    expect(deltas.filter((d) => d.kind === "turn.boundary")).toEqual([
+      expect.objectContaining({ status: "interrupted" }),
+    ]);
+    expect(deltas.filter((d) => d.kind === "provider.error")).toEqual([]);
+    expect(t.commands().filter((c) => c === "prompt")).toHaveLength(2);
+    expect(deltas.filter((d) => d.kind === "turn.open")).toHaveLength(1);
   },
 );
 

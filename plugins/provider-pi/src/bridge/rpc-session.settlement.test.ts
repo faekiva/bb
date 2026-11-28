@@ -457,6 +457,81 @@ it("ignores duplicate authoritative settlement without duplicate delivery", asyn
   expect(h.kill).not.toHaveBeenCalled();
 });
 
+it("settles a dispatched steer's abort as an interruption, not a failure", async () => {
+  const h = harness();
+  const dispatch = h.session.prompt("original prompt");
+  await dispatch.consumed;
+  h.event({ type: "agent_start" });
+  await h.session.steer("steered prompt");
+  h.end("steered", "aborted");
+  h.settle("steered");
+  expect(await dispatch.settled).toEqual({ boundaryDelivered: true });
+  await h.control.deliveryChain;
+  expect(h.events.filter((event) => event.settlementOnly)).toEqual([
+    expect.objectContaining({
+      settlementInterrupted: true,
+      providerCheckpointId: "checkpoint-steered",
+    }),
+  ]);
+  expect(h.onDone).not.toHaveBeenCalled();
+});
+
+it("still fails an abort no dispatched steer explains", async () => {
+  const h = harness();
+  const dispatch = h.session.prompt("original prompt");
+  await dispatch.consumed;
+  h.event({ type: "agent_start" });
+  h.end("asteered", "aborted");
+  h.settle("asteered");
+  expect(await dispatch.settled).toEqual({
+    boundaryDelivered: true,
+    error: new Error(
+      "Pi run interrupted unexpectedly; no automatic resume was attempted",
+    ),
+  });
+  await h.control.deliveryChain;
+  expect(h.events.filter((event) => event.settlementOnly)).toEqual([
+    expect.objectContaining({
+      settlementError: expect.stringContaining("no automatic resume"),
+    }),
+  ]);
+});
+
+it("leaves a completed settlement of a steered run untouched", async () => {
+  const h = harness();
+  const dispatch = h.session.prompt("original prompt");
+  await dispatch.consumed;
+  h.event({ type: "agent_start" });
+  await h.session.steer("steered prompt");
+  h.end("completed");
+  h.settle("completed");
+  expect(await dispatch.settled).toEqual({ boundaryDelivered: true });
+  await h.control.deliveryChain;
+  expect(h.events.filter((event) => event.settlementOnly)).toHaveLength(1);
+  expect(
+    h.events.find((event) => event.settlementOnly)?.settlementInterrupted,
+  ).toBeUndefined();
+});
+
+it("does not report a failure when a steered run's successor starts first", async () => {
+  const h = harness();
+  const dispatch = h.session.prompt("original prompt");
+  await dispatch.consumed;
+  h.event({ type: "agent_start" });
+  await h.session.steer("steered prompt");
+  h.end("steered", "aborted");
+  h.event({ type: "agent_start" });
+  h.end("redelivered");
+  h.settle("redelivered");
+  expect(await dispatch.settled).toEqual({ boundaryDelivered: true });
+  await h.control.deliveryChain;
+  expect(h.events.filter((event) => event.settlementSuperseded)).toEqual([]);
+  expect(
+    h.events.some((event) => event.type === "agent_end" && event.settlementError),
+  ).toBe(false);
+  expect(h.onDone).not.toHaveBeenCalled();
+});
+
 it.each(["bb-first", "bb-last"])(
   "real Pi 0.84 starts B inside an async settlement handler before A stdout (%s)",
   async (order) => {

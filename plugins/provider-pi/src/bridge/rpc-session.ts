@@ -1,7 +1,7 @@
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { resolvePiModelSelection, type PiModelRef } from "./model-selection.js";
-import { runSettlementError } from "./run-settlement.js";
+import { runSettlement, type RunSettlement } from "./run-settlement.js";
 import {
   experimental_buildBridgeToolCallContent as buildBridgeToolCallContent,
   experimental_buildProviderCliEnv as buildProviderCliEnv,
@@ -192,6 +192,7 @@ export class PiRpcSession {
       leafId?: string | null;
       recoveryError?: string;
       overflowRecovered?: boolean;
+      supersededBySteer?: boolean;
     }
   >();
   private deliveredRunActive = false;
@@ -507,6 +508,7 @@ export class PiRpcSession {
 
   async steer(text: string, images?: ImageContent[]): Promise<void> {
     const child = this.requireChild();
+    const steeredRunId = this.agentRunsStarted;
     const tracked = this.trackPendingInputConsumption("steering");
     try {
       await this.dispatchWithTransientAuthRetry(child, {
@@ -520,6 +522,8 @@ export class PiRpcSession {
       this.onDone(error);
       throw error;
     }
+    const steeredRun = this.runs.get(steeredRunId);
+    if (steeredRun) steeredRun.supersededBySteer = true;
     if (tracked.pending.queuedText === null) {
       this.resolvePendingInputConsumption(tracked.pending);
       return;
@@ -766,13 +770,20 @@ export class PiRpcSession {
         run.end = event;
         run.leafId = leafId;
         this.runs.set(runId, run);
+        const settlement = runSettlement(event, event.messages, {
+          supersededBySteer:
+            run.supersededBySteer === true && run.recoveryError === undefined,
+        });
         this.onEvent({
           ...event,
           ...(this.supportsSettlement ? { deferSettlement: true } : {}),
+          ...(settlement.status === "interrupted"
+            ? { settlementInterrupted: true }
+            : {}),
           ...(leafId === null ? {} : { providerCheckpointId: leafId }),
         });
         if (!this.supportsSettlement) {
-          this.settleRun(event);
+          this.settleRun(event, settlement);
           if (event.willRetry !== true) this.retireRunsThrough(runId);
         }
       });
@@ -866,13 +877,23 @@ export class PiRpcSession {
       return;
     }
     const messages = run.end.messages ?? [];
-    const error = run.recoveryError ?? runSettlementError(event, messages);
+    const settlement: RunSettlement =
+      run.recoveryError === undefined
+        ? runSettlement(event, messages, {
+            supersededBySteer: run.supersededBySteer === true,
+          })
+        : { status: "failed", error: run.recoveryError };
     const checkpoint = leafId ?? run.leafId;
     const finalEvent: PiRpcEvent = {
       type: "agent_end",
       messages,
       settlementOnly: true,
-      ...(error ? { settlementError: error } : {}),
+      ...(settlement.error === undefined
+        ? {}
+        : { settlementError: settlement.error }),
+      ...(settlement.status === "interrupted"
+        ? { settlementInterrupted: true }
+        : {}),
       ...(run.recoveryError === undefined
         ? {}
         : { settlementErrorReported: true }),
@@ -884,7 +905,7 @@ export class PiRpcSession {
     this.retireRunsThrough(runId);
     this.onEvent(finalEvent);
     this.onEvent({ ...event, type: "agent_settled" });
-    this.settleRun(finalEvent);
+    this.settleRun(finalEvent, settlement);
     if (this.agentRunsStarted === runId) this.scheduleTerminalSteerSettlement();
   }
 
@@ -898,14 +919,16 @@ export class PiRpcSession {
     ) {
       return;
     }
-    const error = runSettlementError(run.end, run.end.messages);
-    if (!error) return;
+    const settlement = runSettlement(run.end, run.end.messages, {
+      supersededBySteer: run.supersededBySteer === true,
+    });
+    if (settlement.error === undefined) return;
     this.onEvent({
       type: "agent_end",
       messages: [],
       deferSettlement: true,
       settlementSuperseded: true,
-      settlementError: error,
+      settlementError: settlement.error,
     });
   }
 
@@ -915,7 +938,7 @@ export class PiRpcSession {
     }
   }
 
-  private settleRun(event: PiRpcEvent): void {
+  private settleRun(event: PiRpcEvent, settlement: RunSettlement): void {
     if (event.willRetry === true) {
       return;
     }
@@ -923,13 +946,11 @@ export class PiRpcSession {
     if (!pending) {
       return;
     }
-    const error =
-      typeof event.settlementError === "string"
-        ? event.settlementError
-        : runSettlementError(event, event.messages);
     pending.resolve({
       boundaryDelivered: true,
-      ...(error ? { error: new Error(error) } : {}),
+      ...(settlement.error === undefined
+        ? {}
+        : { error: new Error(settlement.error) }),
     });
   }
 

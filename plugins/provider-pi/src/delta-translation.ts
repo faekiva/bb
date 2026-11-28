@@ -31,7 +31,7 @@ import {
 } from "@get-bb/plugin-sdk/provider-bridge";
 import { toCanonicalPiModelId } from "./model-list.js";
 import { piVisibilityMetadata } from "./visibility.js";
-import { runSettlementError } from "./bridge/run-settlement.js";
+import { runSettlement } from "./bridge/run-settlement.js";
 
 export interface PiContextWindowModel {
   contextWindow?: number;
@@ -140,6 +140,7 @@ const piAgentEndEventSchema = z
     settlementError: z.string().optional(),
     settlementErrorReported: z.boolean().optional(),
     settlementSuperseded: z.boolean().optional(),
+    settlementInterrupted: z.boolean().optional(),
   })
   .passthrough();
 
@@ -931,9 +932,13 @@ export function createPiDeltaTranslator(
           }
           return [];
         }
+        const settlement = runSettlement(piEvent.data, piEvent.data.messages, {
+          supersededBySteer: piEvent.data.settlementInterrupted === true,
+        });
         const settlementError =
-          piEvent.data.settlementError ??
-          runSettlementError(piEvent.data, piEvent.data.messages);
+          piEvent.data.settlementError ?? settlement.error;
+        const settlementInterrupted =
+          settlementError === undefined && settlement.status === "interrupted";
         if (settlementError && !piEvent.data.deferSettlement) {
           clearThreadToolShapes(context);
           const failure: ThreadDelta[] = [];
@@ -1014,7 +1019,7 @@ export function createPiDeltaTranslator(
         if (piEvent.data.deferSettlement) return deltas;
         deltas.push({
           kind: "turn.boundary",
-          status: "completed",
+          status: settlementInterrupted ? "interrupted" : "completed",
           ...(piEvent.data.providerCheckpointId !== undefined
             ? { providerCheckpointId: piEvent.data.providerCheckpointId }
             : {}),

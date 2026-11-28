@@ -5,57 +5,93 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { expect, it } from "vitest";
 import { BB_PI_EXTENSION_SOURCE } from "./bb-pi-extension.js";
-import { runSettlementError } from "./run-settlement.js";
+import { runSettlement } from "./run-settlement.js";
 
 it.each([{}, { aborted: false }])(
   "does not infer interruption from prose: %j",
   (event) => {
     expect(
-      runSettlementError(event, [
+      runSettlement(event, [
         {
           role: "assistant",
           stopReason: "stop",
           content: "I was aborted; continue?",
         },
       ]),
-    ).toBeUndefined();
+    ).toEqual({ status: "completed" });
   },
 );
 it.each([null, "false", 0, {}, []])(
   "fails safely for malformed aborted=%j",
   (aborted) => {
-    expect(runSettlementError({ aborted }, [])).toContain(
-      "Invalid Pi settlement",
-    );
+    expect(runSettlement({ aborted }, [])).toEqual({
+      status: "failed",
+      error: expect.stringContaining("Invalid Pi settlement"),
+    });
   },
 );
 it("recognizes abort without an error message, including trailing tool results", () => {
   expect(
-    runSettlementError({}, [
+    runSettlement({}, [
       { role: "assistant", stopReason: "aborted" },
       { role: "toolResult" },
     ]),
-  ).toContain("interrupted");
+  ).toEqual({ status: "failed", error: expect.stringContaining("interrupted") });
   expect(
-    runSettlementError({ aborted: false }, [
+    runSettlement({ aborted: false }, [
       { role: "assistant", stopReason: "aborted" },
     ]),
-  ).toContain("interrupted");
-  expect(runSettlementError({ aborted: true }, [])).toContain(
-    "no automatic resume",
-  );
+  ).toEqual({ status: "failed", error: expect.stringContaining("interrupted") });
+  expect(runSettlement({ aborted: true }, [])).toEqual({
+    status: "failed",
+    error: expect.stringContaining("no automatic resume"),
+  });
   expect(
-    runSettlementError({}, [{ role: "assistant", stopReason: "error" }]),
-  ).toBe("Pi run failed");
+    runSettlement({}, [{ role: "assistant", stopReason: "error" }]),
+  ).toEqual({ status: "failed", error: "Pi run failed" });
 });
 it("uses the final assistant rather than earlier retry failures", () => {
   expect(
-    runSettlementError({}, [
+    runSettlement({}, [
       { role: "assistant", stopReason: "error" },
       { role: "assistant", stopReason: "stop" },
     ]),
-  ).toBeUndefined();
+  ).toEqual({ status: "completed" });
 });
+it.each([
+  [{ aborted: true }, []],
+  [{}, [{ role: "assistant", stopReason: "aborted" }]],
+  [
+    { aborted: true },
+    [
+      { role: "assistant", stopReason: "aborted" },
+      { role: "toolResult" },
+    ],
+  ],
+])(
+  "interrupts the abort of a run a dispatched steer superseded: %j",
+  (event, messages) => {
+    expect(runSettlement(event, messages, { supersededBySteer: true })).toEqual(
+      { status: "interrupted" },
+    );
+    expect(runSettlement(event, messages, { supersededBySteer: false })).toEqual(
+      { status: "failed", error: expect.stringContaining("no automatic resume") },
+    );
+  },
+);
+it.each([
+  [{}, [{ role: "assistant", stopReason: "stop" }]],
+  [{ aborted: false }, []],
+  [{ aborted: null }, []],
+  [{}, [{ role: "assistant", stopReason: "error", errorMessage: "boom" }]],
+])(
+  "leaves the non-abort settlement of a steered run unchanged: %j",
+  (event, messages) => {
+    expect(runSettlement(event, messages, { supersededBySteer: true })).toEqual(
+      runSettlement(event, messages),
+    );
+  },
+);
 
 it.each([
   ["0.84.0", true],

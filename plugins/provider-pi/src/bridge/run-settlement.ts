@@ -1,9 +1,24 @@
-export function runSettlementError(
+export type RunSettlementStatus = "completed" | "interrupted" | "failed";
+
+export interface RunSettlement {
+  status: RunSettlementStatus;
+  error?: string;
+}
+
+export interface RunSettlementContext {
+  supersededBySteer?: boolean;
+}
+
+export function runSettlement(
   event: Record<string, unknown>,
   messages: unknown,
-): string | undefined {
+  context: RunSettlementContext = {},
+): RunSettlement {
   if (Object.hasOwn(event, "aborted") && typeof event.aborted !== "boolean") {
-    return "Invalid Pi settlement: aborted must be boolean when present";
+    return {
+      status: "failed",
+      error: "Invalid Pi settlement: aborted must be boolean when present",
+    };
   }
   const last = Array.isArray(messages)
     ? [...messages]
@@ -17,12 +32,22 @@ export function runSettlementError(
         )
     : undefined;
   if (event.aborted === true || last?.stopReason === "aborted") {
-    return "Pi run interrupted unexpectedly; no automatic resume was attempted";
+    return context.supersededBySteer === true
+      ? { status: "interrupted" }
+      : {
+          status: "failed",
+          error:
+            "Pi run interrupted unexpectedly; no automatic resume was attempted",
+        };
   }
   if (last?.stopReason === "error") {
-    return typeof last.errorMessage === "string" && last.errorMessage.trim()
-      ? last.errorMessage
-      : "Pi run failed";
+    return {
+      status: "failed",
+      error:
+        typeof last.errorMessage === "string" && last.errorMessage.trim()
+          ? last.errorMessage
+          : "Pi run failed",
+    };
   }
-  return undefined;
+  return { status: "completed" };
 }

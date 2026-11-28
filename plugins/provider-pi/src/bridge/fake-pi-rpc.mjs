@@ -181,6 +181,7 @@ const followUp = [];
 const steering = [];
 const extensionUiWaiters = new Map();
 let endedWithStreamingFlag = false;
+let abortedSettlement = false;
 
 let heldLine = null;
 
@@ -463,6 +464,7 @@ async function runPrompt(text) {
       isStreaming = endedWithStreamingFlag;
       return;
     }
+    if (released === "steer-abort") abortedSettlement = true;
     const message = {
       role: "assistant",
       content: [{ type: "text", text: "" }],
@@ -698,8 +700,11 @@ async function emitSettlement() {
   if (process.env.FAKE_PI_FINAL_LEAF) leafId = process.env.FAKE_PI_FINAL_LEAF;
   const payload =
     process.env.FAKE_PI_SETTLED_ABORTED === undefined
-      ? {}
+      ? abortedSettlement
+        ? { aborted: true }
+        : {}
       : { aborted: JSON.parse(process.env.FAKE_PI_SETTLED_ABORTED) };
+  abortedSettlement = false;
   await emitExtensionEvent("agent_settled", payload);
   event({ type: "agent_settled", ...payload });
   if (process.env.FAKE_PI_DUPLICATE_SETTLED === "1") {
@@ -807,6 +812,11 @@ async function handle(command) {
         return;
       }
       if (isStreaming && command.streamingBehavior === "steer") {
+        if (process.env.FAKE_PI_STEER_ABORTS === "1" && holdAbort) {
+          respond(id, "prompt");
+          holdAbort("steer-abort");
+          return;
+        }
         steering.push(command.message);
         queueUpdate();
         if (process.env.FAKE_PI_BATCH_STEER_REPLY === "1" && holdAbort) {
